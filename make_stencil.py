@@ -382,6 +382,7 @@ def make_stencil(project_name, **kwargs):
     f_paste_filename = kwargs.get('f_paste', project_name + '-F_Paste.svg')
     frame_filename = kwargs.get('frame', project_name + '-frame.svg')
     stencil_filename = kwargs.get('stencil', project_name + '-stencil.svg')
+    show_paste = True if kwargs.get('show_paste', 'False') in ('True', 'TRUE', 'true', 'on', '1') else False
     stroke_width = convert_length(kwargs.get('stroke_width', '0.25px'))
     frame_offset = convert_length(kwargs.get('frame_offset', '1mm'))
     frame_width = convert_length(kwargs.get('frame_width', '6in'))
@@ -408,10 +409,13 @@ def make_stencil(project_name, **kwargs):
     frame_origin = Point(edge_cut_center.x - 0.5 * frame_width * scale_factor, edge_cut_center.y - 0.5 * frame_height * scale_factor)
     write_svg_file(frame_filename, frame_width, frame_height, scale_factor, frame_origin, offset_edge_cut + edge_cut, list('b' + 'k'), stroke_width)
 
-    inset_f_paste = offset_paths(f_paste, stencil_offset * scale_factor)
+    offset_f_paste = offset_paths(f_paste, stencil_offset * scale_factor)
 
     stencil_origin = Point(edge_cut_center.x - 0.5 * stencil_width * scale_factor, edge_cut_center.y - 0.5 * stencil_height * scale_factor)
-    write_svg_file(stencil_filename, stencil_width, stencil_height, scale_factor, stencil_origin, inset_f_paste + edge_cut, list('b' * len(inset_f_paste) + 'k' * len(edge_cut)), stroke_width)
+    if show_paste:
+        write_svg_file(stencil_filename, stencil_width, stencil_height, scale_factor, stencil_origin, offset_f_paste + f_paste + edge_cut, list('b' * len(offset_f_paste) + 'k' * len(f_paste) + 'k' * len(edge_cut)), stroke_width)
+    else:
+        write_svg_file(stencil_filename, stencil_width, stencil_height, scale_factor, stencil_origin, offset_f_paste + edge_cut, list('b' * len(offset_f_paste) + 'k' * len(edge_cut)), stroke_width)
 
 if __name__ == '__main__':
     if len(sys.argv) < 2 or sys.argv[1] == '-h' or sys.argv[1] == '--help':
@@ -429,6 +433,7 @@ if __name__ == '__main__':
             the cuts for the stencil frame.
     stencil [<project_name>-stencil.svg]: Name of the output file that will 
             contain the cuts for the stencil.
+    show_paste [False]: Switch to show original front paste layer in stencil.
     stroke_width [0.25px]: Stroke width to be used for the paths in the stencil 
             frame and stencil SVG files generated.
     frame_offset [1mm]: Distance to offset the edge cuts layer outward for the 
