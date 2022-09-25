@@ -382,7 +382,7 @@ def make_stencil(project_name, **kwargs):
     f_paste_filename = kwargs.get('f_paste', project_name + '-F_Paste.svg')
     frame_filename = kwargs.get('frame', project_name + '-frame.svg')
     stencil_filename = kwargs.get('stencil', project_name + '-stencil.svg')
-    show_cuts = True if kwargs.get('show_cuts', 'True') in ('Ture', 'TRUE', 'true', 'on', '1') else False
+    show_cuts = True if kwargs.get('show_cuts', 'True') in ('True', 'TRUE', 'true', 'on', '1') else False
     show_paste = True if kwargs.get('show_paste', 'False') in ('True', 'TRUE', 'true', 'on', '1') else False
     stroke_width = convert_length(kwargs.get('stroke_width', '0.25px'))
     frame_offset = convert_length(kwargs.get('frame_offset', '1mm'))
