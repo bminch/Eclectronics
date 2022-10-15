@@ -66,6 +66,9 @@ class Point:
         self.x -= other.x
         self.y -= other.y
 
+    def mag(self):
+        return math.sqrt(self.x ** 2 + self.y ** 2)
+
 def parse_svg_file(svg_filename):
 
     class States(Enum):
@@ -139,6 +142,8 @@ def parse_svg_paths(svg_paths):
             d = d.replace('h', 'h ')
             d = d.replace('V', 'V ')
             d = d.replace('v', 'v ')
+            d = d.replace('A', 'A ')
+            d = d.replace('a', 'a ')
             d = d.replace('  ', ' ')
             path_data = d.split(' ')
             path = []
@@ -180,6 +185,49 @@ def parse_svg_paths(svg_paths):
                     last_cmd = path_data[i]
                     path.append(path[-1] + Point(0., float(path_data[i + 1])))
                     i += 2
+                elif path_data[i] == 'A' or path_data[i] == 'a':
+                    last_cmd = path_data[i]
+                    rx = float(path_data[i + 1])
+                    ry = float(path_data[i + 2])
+                    phi = math.pi * float(path_data[i + 3]) / 180.
+                    largeArcFlag = bool(float(path_data[i + 4]))
+                    sweepFlag = bool(float(path_data[i + 5]))
+                    x1 = path[-1].x
+                    y1 = path[-1].y
+                    x2 = float(path_data[i + 6])
+                    y2 = float(path_data[i + 7])
+                    if last_cmd == 'a':
+                        x2 += x1
+                        y2 += y1
+
+                    # See https://www.w3.org/TR/SVG/implnote.html#ArcImplementationNotes
+                    cosPhi = math.cos(phi)
+                    sinPhi = math.sin(phi)
+                    xdm = 0.5 * (x1 - x2)
+                    ydm = 0.5 * (y1 - y2)
+                    x1_ = cosPhi * xdm + sinPhi * ydm
+                    y1_ = -sinPhi * xdm + cosPhi * ydm
+                    sqrtThingy = math.sqrt((rx ** 2 * ry ** 2 - rx ** 2 * y1_ ** 2 - ry ** 2 * x1_ ** 2) / (rx ** 2 * y1_ ** 2 + ry ** 2 * x1_ ** 2))
+                    sqrtThingy = -sqrtThingy if largeArcFlag == sweepFlag else sqrtThingy
+                    cx_ = sqrtThingy * rx * y1_ / ry
+                    cy_ = -sqrtThingy * ry * x1_ / rx
+                    cx = cosPhi * cx_ - sinPhi * cy_ + 0.5 * (x1 + x2)
+                    cy = sinPhi * cx_ + cosPhi * cy_ + 0.5 * (y1 + y2)
+                    theta = math.acos((x1_ - cx_) / (rx * math.sqrt(((x1_ - cx_) / rx) ** 2 + ((y1_ - cy_) / ry) ** 2)))
+                    theta = -theta if y1_ - cy_ < 0. else theta
+                    dtheta = math.acos(((x1_ - cx_) * (-x1_ - cx_) / rx ** 2 + (y1_ - cy_) * (-y1_ - cy_) / ry ** 2) / (math.sqrt(((x1_ - cx_) / rx) ** 2 + ((y1_ - cy_) / ry) ** 2) * math.sqrt(((-x1_ - cx_) / rx) ** 2 + ((-y1_ - cy_) / ry) ** 2)))
+                    dtheta = -dtheta if (x1_ - cx_) * (-y1_ - cy_) - (y1_ - cy_) * (-x1_ - cx_) < 0. else dtheta
+                    if not sweepFlag and dtheta > 0.:
+                        dtheta -= 2. * math.pi
+                    elif sweepFlag and dtheta < 0.:
+                        dtheta += 2. * math.pi
+
+                    numPoints = max(5, int(math.ceil(20. * abs(dtheta) / math.pi)))
+                    dtheta = dtheta / (numPoints - 1)
+                    for i in range(1, numPoints - 1):
+                        path.append(Point(cx + rx * math.cos(theta + i * dtheta), cy + ry * math.sin(theta + i * dtheta)))
+                    path.append(Point(x2, y2))
+                    i += 8
                 elif path_data[i] == 'Z' or path_data[i] == 'z':
                     break
                 elif last_cmd == 'M':
@@ -213,31 +261,35 @@ def parse_svg_paths(svg_paths):
             pass
     return paths
 
-def merge_lines_into_paths(paths):
-    new_paths = []
-    i = 0
-    while i < len(paths):
-        if len(paths[i]) == 2:
-            new_path = [paths[i][0], paths[i][1]]
-            del(paths[i])
-            j = i
+def consolidate_paths(paths):
+    done = False
+    while not done:
+        initial_num_paths = len(paths)
+        i = 0
+        while i < len(paths):
+            j = i + 1
             while j < len(paths):
-                if len(paths[j]) == 2:
-                    if new_path[-1] == paths[j][0]:
-                        new_path.append(paths[j][1])
-                        del(paths[j])
-                    elif new_path[-1] == paths[j][1]:
-                        new_path.append(paths[j][0])
-                        del(paths[j])
-                    else:
-                        j += 1
-            if new_path[0] == new_path[-1]:
-                new_path = new_path[:-1]
-            if len(new_path) != 2:
-                new_paths.append(new_path)
-        else:
+                if (paths[i][-1] - paths[j][0]).mag() < 2.:
+                    paths[i].extend(paths[j][1:])
+                    del paths[j]
+                elif (paths[i][-1] - paths[j][-1]).mag() < 2.:
+                    paths[i].extend(paths[j][::-1][1:])
+                    del paths[j]
+                elif (paths[i][0] - paths[j][0]).mag() < 2.:
+                    paths[i] = paths[i][::-1]
+                    paths[i].extend(paths[j][1:])
+                    del paths[j]
+                elif (paths[i][0] - paths[j][-1]).mag() < 2.:
+                    paths[i] = paths[i][::-1]
+                    paths[i].extend(paths[j][::-1][1:])
+                    del paths[j]
+                else:
+                    j += 1
+            if (paths[i][0] - paths[i][-1]).mag() < 2.:
+                paths[i] = paths[i][:-1]
             i += 1
-    return new_paths
+        done = len(paths) == initial_num_paths
+    return paths
 
 def is_convex(path):
     cross_products = []
@@ -394,7 +446,7 @@ def make_stencil(project_name, **kwargs):
 
     [edge_cuts_properties, edge_cuts_paths] = parse_svg_file(edge_cuts_filename)
     edge_cuts = parse_svg_paths(edge_cuts_paths)
-    edge_cut = merge_lines_into_paths(edge_cuts)
+    edge_cut = consolidate_paths(edge_cuts)
     edge_cut_bbox = bounding_box(edge_cut)
     edge_cut_center = Point(0.5 * (edge_cut_bbox[0] + edge_cut_bbox[2]), 0.5 * (edge_cut_bbox[1] + edge_cut_bbox[3]))
 
