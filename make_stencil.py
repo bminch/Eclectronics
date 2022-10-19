@@ -345,6 +345,36 @@ def remove_self_intersections(path):
     return new_path
 
 def offset_path(path, offset):
+    num_pos = 0
+    num_neg = 0
+    i = 0
+    while i < len(path):
+        p0 = path[(i - 1) % len(path)]
+        p1 = path[i]
+        p2 = path[(i + 1) % len(path)]
+
+        x1 = p1.x - p0.x
+        y1 = p1.y - p0.y
+
+        x2 = p2.x - p1.x
+        y2 = p2.y - p1.y
+
+        magA = math.sqrt(x1 * x1 + y1 * y1)
+        magB = math.sqrt(x2 * x2 + y2 * y2)
+        AdotB = x1 * x2 + y1 * y2
+        AcrossB = x1 * y2 - x2 * y1
+
+        cosTheta = AdotB / (magA * magB)
+        sinTheta = AcrossB / (magA * magB)
+        theta = math.acos(cosTheta) if sinTheta >= 0. else -math.acos(cosTheta)
+        if theta > 0.:
+            num_pos += 1
+        elif theta < 0.:
+            num_neg += 1
+
+        i += 1
+
+    majority_sign = 1. if num_pos >= num_neg else -1.
     new_path = []
     i = 0
     while i < len(path):
@@ -375,7 +405,8 @@ def offset_path(path, offset):
         sinAlpha = y1 / magA
         alpha = math.acos(cosAlpha) if sinAlpha >= 0. else -math.acos(cosAlpha)
 
-        new_path.append(p1 + Point(offset_distance * math.cos(alpha + theta + gamma), offset_distance * math.sin(alpha + theta + gamma)))
+        sign = math.copysign(1., theta) / majority_sign
+        new_path.append(p1 + Point(sign * offset_distance * math.cos(alpha + theta + gamma), sign * offset_distance * math.sin(alpha + theta + gamma)))
         i += 1
 
     if is_convex(path) and not is_convex(new_path):
