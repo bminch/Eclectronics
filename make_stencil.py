@@ -291,6 +291,27 @@ def consolidate_paths(paths):
         done = len(paths) == initial_num_paths
     return paths
 
+def consolidate_clusters(path, radius = 5000.):
+    new_path = []
+    i = 0
+    while i < len(path):
+        done = False
+        cluster = [path[i]]
+        while not done:
+            centroid = Point(sum([p.x for p in cluster]) / len(cluster), sum([p.y for p in cluster]) / len(cluster))
+            if all([(p - centroid).mag() < radius for p in cluster]):
+                if i + len(cluster) < len(path):
+                    cluster.append(path[i + len(cluster)])
+                else:
+                    done = True
+            else:
+                cluster = cluster[:-1]
+                done = True
+        centroid = Point(sum([p.x for p in cluster]) / len(cluster), sum([p.y for p in cluster]) / len(cluster))
+        new_path.append(centroid)
+        i += len(cluster)
+    return new_path
+
 def is_convex(path):
     cross_products = []
     i = 0
@@ -408,6 +429,8 @@ def offset_path(path, offset):
         sign = math.copysign(1., theta) / majority_sign
         new_path.append(p1 + Point(sign * offset_distance * math.cos(alpha + theta + gamma), sign * offset_distance * math.sin(alpha + theta + gamma)))
         i += 1
+
+    new_path = consolidate_clusters(new_path)
 
     if is_convex(path) and not is_convex(new_path):
         return remove_self_intersections(new_path)
