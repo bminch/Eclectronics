@@ -475,7 +475,7 @@ def convert_length(length):
     elif length[-2:] == 'pt':
         return 2.54 * float(length[:-2]) / 72.
     elif length[-2:] == 'cm':
-        return float(legnth[:-2])
+        return float(length[:-2])
     elif length[-2:] == 'mm':
         return float(length[:-2]) / 10.
     elif length[-2:] == 'um' or length[-2:] == 'µm':
