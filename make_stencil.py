@@ -75,6 +75,7 @@ def parse_svg_file(svg_filename):
         SCANNING = 1
         IN_SVG = 2
         IN_PATH = 3
+        IN_CIRCLE = 4
 
     svg_file = open(svg_filename, 'r')
 
@@ -94,6 +95,10 @@ def parse_svg_file(svg_filename):
                     line = line[line.find('<path') + 5:]
                     element = ''
                     state = States.IN_PATH
+                elif '<circle' in line:
+                    line = line[line.find('<circle') + 7:]
+                    element = ''
+                    state = States.IN_CIRCLE
                 else:
                     line = ''
             elif state == States.IN_SVG:
@@ -120,6 +125,32 @@ def parse_svg_file(svg_filename):
                             path[key_val_pair[0]] = key_val_pair[1].strip()
                     paths.append(path)
                     line = line[line.find('/>') + 2:]
+                    state = States.SCANNING
+                else:
+                    element += ' ' + line
+                    line = ''
+            elif state == States.IN_CIRCLE:
+                if '/>' in line:
+                    element += ' ' + line[:line.find('/>')]
+                    circle = {}
+                    properties = shlex.split(element.strip())
+                    for p in properties:
+                        key_val_pair = p.split('=')
+                        if len(key_val_pair) == 2:
+                            circle[key_val_pair[0]] = key_val_pair[1].strip()
+                    line = line[line.find('/>') + 2:]
+                    cx = float(circle['cx'])
+                    cy = float(circle['cy'])
+                    r = float(circle['r'])
+                    d = 'M '
+                    num_points = 24
+                    dtheta = 2. * math.pi / num_points
+                    for i in range(num_points):
+                        d += f'{cx + r * math.cos(i * dtheta)},{cy + r * math.sin(i * dtheta)} '
+                    d += 'Z'
+                    path = {}
+                    path['d'] = d
+                    paths.append(path)
                     state = States.SCANNING
                 else:
                     element += ' ' + line
