@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (c) 2022, Bradley A. Minch
+# Copyright (c) 2022-23, Bradley A. Minch
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -292,7 +292,7 @@ def parse_svg_paths(svg_paths):
             pass
     return paths
 
-def consolidate_paths(paths):
+def consolidate_paths(paths, radius):
     done = False
     while not done:
         initial_num_paths = len(paths)
@@ -300,29 +300,29 @@ def consolidate_paths(paths):
         while i < len(paths):
             j = i + 1
             while j < len(paths):
-                if (paths[i][-1] - paths[j][0]).mag() < 2.:
+                if (paths[i][-1] - paths[j][0]).mag() < radius:
                     paths[i].extend(paths[j][1:])
                     del paths[j]
-                elif (paths[i][-1] - paths[j][-1]).mag() < 2.:
+                elif (paths[i][-1] - paths[j][-1]).mag() < radius:
                     paths[i].extend(paths[j][::-1][1:])
                     del paths[j]
-                elif (paths[i][0] - paths[j][0]).mag() < 2.:
+                elif (paths[i][0] - paths[j][0]).mag() < radius:
                     paths[i] = paths[i][::-1]
                     paths[i].extend(paths[j][1:])
                     del paths[j]
-                elif (paths[i][0] - paths[j][-1]).mag() < 2.:
+                elif (paths[i][0] - paths[j][-1]).mag() < radius:
                     paths[i] = paths[i][::-1]
                     paths[i].extend(paths[j][::-1][1:])
                     del paths[j]
                 else:
                     j += 1
-            if (paths[i][0] - paths[i][-1]).mag() < 2.:
+            if (paths[i][0] - paths[i][-1]).mag() < radius:
                 paths[i] = paths[i][:-1]
             i += 1
         done = len(paths) == initial_num_paths
     return paths
 
-def consolidate_clusters(path, radius = 5000.):
+def consolidate_clusters(path, radius):
     new_path = []
     i = 0
     while i < len(path):
@@ -396,7 +396,7 @@ def remove_self_intersections(path):
         i -= 1
     return new_path
 
-def offset_path(path, offset):
+def offset_path(path, offset, radius):
     num_pos = 0
     num_neg = 0
     i = 0
@@ -461,15 +461,15 @@ def offset_path(path, offset):
         new_path.append(p1 + Point(sign * offset_distance * math.cos(alpha + theta + gamma), sign * offset_distance * math.sin(alpha + theta + gamma)))
         i += 1
 
-    new_path = consolidate_clusters(new_path)
+    new_path = consolidate_clusters(new_path, radius)
 
     if is_convex(path) and not is_convex(new_path):
         return remove_self_intersections(new_path)
     else:
         return new_path
 
-def offset_paths(paths, offset):
-    return [offset_path(path, offset) for path in paths]
+def offset_paths(paths, offset, radius):
+    return [offset_path(path, offset, radius) for path in paths]
 
 def bounding_box(paths):
     xvals = []
@@ -506,7 +506,7 @@ def convert_length(length):
     elif length[-2:] == 'pt':
         return 2.54 * float(length[:-2]) / 72.
     elif length[-2:] == 'cm':
-        return float(legnth[:-2])
+        return float(length[:-2])
     elif length[-2:] == 'mm':
         return float(length[:-2]) / 10.
     elif length[-2:] == 'um' or length[-2:] == 'µm':
@@ -530,8 +530,10 @@ def make_stencil(project_name, **kwargs):
     stencil_height = convert_length(kwargs.get('stencil_height', '4in'))
 
     [edge_cuts_properties, edge_cuts_paths] = parse_svg_file(edge_cuts_filename)
+    view_box = [float(val) for val in edge_cuts_properties['viewBox'].split(' ')]
+    scale_factor = view_box[2] / convert_length(edge_cuts_properties['width'])
     edge_cuts = parse_svg_paths(edge_cuts_paths)
-    edge_cut = consolidate_paths(edge_cuts)
+    edge_cut = consolidate_paths(edge_cuts, 5e-4 * scale_factor)
     edge_cut_bbox = bounding_box(edge_cut)
     edge_cut_center = Point(0.5 * (edge_cut_bbox[0] + edge_cut_bbox[2]), 0.5 * (edge_cut_bbox[1] + edge_cut_bbox[3]))
 
@@ -539,10 +541,7 @@ def make_stencil(project_name, **kwargs):
     f_paste = parse_svg_paths(f_paste_paths)
     f_paste = [path for path in f_paste if len(path) != 2]
 
-    view_box = [float(val) for val in edge_cuts_properties['viewBox'].split(' ')]
-    scale_factor = view_box[2] / float(edge_cuts_properties['width'][:-2])
-
-    offset_edge_cut = offset_paths(edge_cut, -frame_offset * scale_factor)
+    offset_edge_cut = offset_paths(edge_cut, -frame_offset * scale_factor, 5e-4 * scale_factor)
 
     frame_origin = Point(edge_cut_center.x - 0.5 * frame_width * scale_factor, edge_cut_center.y - 0.5 * frame_height * scale_factor)
 
@@ -551,7 +550,7 @@ def make_stencil(project_name, **kwargs):
     else:
         write_svg_file(frame_filename, frame_width, frame_height, scale_factor, frame_origin, offset_edge_cut, list('b'), stroke_width)
 
-    offset_f_paste = offset_paths(f_paste, stencil_offset * scale_factor)
+    offset_f_paste = offset_paths(f_paste, stencil_offset * scale_factor, 5e-4 * scale_factor)
 
     stencil_origin = Point(edge_cut_center.x - 0.5 * stencil_width * scale_factor, edge_cut_center.y - 0.5 * stencil_height * scale_factor)
     if show_paste and show_cuts:
